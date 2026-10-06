@@ -110,8 +110,9 @@ final class PinWindowTests: XCTestCase {
 
     func testPinConvertsTopLeftPositionToAppKitFrame() {
         let manager = PinManager()
-        let window = manager.pin(image: makeImage(), frame: CGRect(x: 100, y: 200, width: 80, height: 40), primaryDisplayHeight: 1000)
-        XCTAssertEqual(window.frame, CGRect(x: 100, y: 760, width: 80, height: 40))
+        let window = manager.pin(image: makeImage(), frame: CGRect(x: 100, y: 100, width: 80, height: 40), primaryDisplayHeight: 400)
+        // Small values keep the frame on-screen: AppKit clamps a shown window to the real display, which is small on CI runners.
+        XCTAssertEqual(window.frame, CGRect(x: 100, y: 260, width: 80, height: 40))
         manager.closeAll()
     }
 }
