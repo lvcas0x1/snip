@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - 'Sources/**'
+      - 'Tests/**'
       - 'Package.swift'
       - 'Package.resolved'
       - 'Scripts/build-app.sh'
