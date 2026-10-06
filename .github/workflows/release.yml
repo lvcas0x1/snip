@@ -1,0 +1,83 @@
+# On a push to main that changes the app or how it is packaged: run the tests, build the app for
+# Apple Silicon, package it as a DMG, and publish it as a GitHub release tagged v<version>.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Sources/**'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - 'Scripts/build-app.sh'
+      - 'Scripts/make-dmg.sh'
+      - 'Scripts/next-version.sh'
+      - 'Scripts/Info.plist'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: write  # create the tag and the release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Test
+        run: swift test
+
+      # Next version: Info.plist's major.minor, and a patch one above the highest released patch for
+      # that major.minor (at least Info.plist's patch). The first release is Info.plist's version.
+      - name: Version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./Scripts/next-version.sh "$(gh release list --limit 1000 --json tagName --jq '.[].tagName')" >> "$GITHUB_OUTPUT"
+
+      - name: Build app
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: ./Scripts/build-app.sh
+
+      - name: Build DMG
+        run: ./Scripts/make-dmg.sh "${{ steps.version.outputs.version }}"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v$VERSION" "build/Snip-$VERSION.dmg" \
+            --target "$GITHUB_SHA" \
+            --title "Snip $VERSION" \
+            --notes "Built from ${GITHUB_SHA::7}. Apple Silicon, macOS 14 or later.
+
+          The app is ad-hoc signed and not notarized. After copying it to Applications, open it once,
+          then allow it in System Settings > Privacy & Security > Open Anyway. Screen Recording
+          permission must be granted again after each update."
+
+      # Keep the 3 newest releases; delete older ones together with their tags.
+      - name: Prune old releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --limit 1000 --json tagName,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[3:][] | .tagName' |
+          while read -r tag; do
+            gh release delete "$tag" --cleanup-tag --yes
+          done
