@@ -72,13 +72,13 @@ jobs:
           then allow it in System Settings > Privacy & Security > Open Anyway. Screen Recording
           permission must be granted again after each update."
 
-      # Keep the 3 newest releases; delete older ones together with their tags.
+      # Keep only the newest release; delete older ones together with their tags.
       - name: Prune old releases
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release list --limit 1000 --json tagName,createdAt \
-            --jq 'sort_by(.createdAt) | reverse | .[3:][] | .tagName' |
+            --jq 'sort_by(.createdAt) | reverse | .[1:][] | .tagName' |
           while read -r tag; do
             gh release delete "$tag" --cleanup-tag --yes
           done
