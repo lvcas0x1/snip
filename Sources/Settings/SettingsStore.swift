@@ -7,7 +7,10 @@ public enum ImageFormat: String, Codable, CaseIterable, Sendable {
 
 public struct SettingsValues: Codable, Equatable, Sendable {
     public var imageFormat: ImageFormat = .png
-    public var autoSaveFolder: String = SettingsValues.defaultFolder("Auto")
+    /// Where the Save panel opens.
+    public var saveFolder: String = SettingsValues.defaultFolder("Pictures/Snip")
+    /// Where Auto Save writes.
+    public var autoSaveFolder: String = SettingsValues.defaultFolder("Pictures/Snip/Auto")
     public var autoSaveEnabled: Bool = false
     /// Text with `{...}` groups; each group is a `DateFormatter` pattern, e.g. `Snip {yyyy-MM-dd HH.mm.ss}`.
     public var filenamePattern: String = "Snip {yyyy-MM-dd HH.mm.ss}"
@@ -16,8 +19,19 @@ public struct SettingsValues: Codable, Equatable, Sendable {
 
     public init() {}
 
-    static func defaultFolder(_ name: String) -> String {
-        (NSHomeDirectory() as NSString).appendingPathComponent("Pictures/Snip/\(name)")
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = SettingsValues()
+        imageFormat = try container.decodeIfPresent(ImageFormat.self, forKey: .imageFormat) ?? defaults.imageFormat
+        saveFolder = try container.decodeIfPresent(String.self, forKey: .saveFolder) ?? defaults.saveFolder
+        autoSaveFolder = try container.decodeIfPresent(String.self, forKey: .autoSaveFolder) ?? defaults.autoSaveFolder
+        autoSaveEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoSaveEnabled) ?? defaults.autoSaveEnabled
+        filenamePattern = try container.decodeIfPresent(String.self, forKey: .filenamePattern) ?? defaults.filenamePattern
+        interfaceFontFamily = try container.decodeIfPresent(String.self, forKey: .interfaceFontFamily)
+    }
+
+    static func defaultFolder(_ path: String) -> String {
+        (NSHomeDirectory() as NSString).appendingPathComponent(path)
     }
 }
 

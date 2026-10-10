@@ -55,7 +55,7 @@ Start a snip with the hotkey (default **⌥/** (Option+/), configurable in Prefe
 | Save | ⌘S or the Save button (PNG or JPEG, set in Preferences) |
 | Pin | The Pin button |
 
-The selection size is shown in pixels. Output is at the display's native pixel resolution. The mouse cursor is never captured. Optional **Auto Save** (Preferences) also writes every copied, saved, or pinned snip to a folder (default `~/Pictures/Snip/Auto`); the filename pattern uses `{...}` groups in `DateFormatter` syntax, e.g. `Snip {yyyy-MM-dd HH.mm.ss}`, and existing files are never overwritten.
+The selection size is shown in pixels. Output is at the display's native pixel resolution. The mouse cursor is never captured. The Save panel opens in the save folder (default `~/Pictures/Snip`). Optional **Auto Save** writes each new selection, without annotations, to the Auto Save folder (default `~/Pictures/Snip/Auto`) as soon as it is made. Both folders can be changed in Preferences. The filename pattern uses `{...}` groups in `DateFormatter` syntax, e.g. `Snip {yyyy-MM-dd HH.mm.ss}`, and existing files are never overwritten.
 
 ### Annotating
 
@@ -74,7 +74,7 @@ A pinned snip stays above other windows on every Space (including full-screen ap
 
 ### Preferences
 
-Snip hotkey, image format, Auto Save, filename pattern, and interface font. Appearance follows the system light/dark setting and accent color.
+Snip hotkey, image format, save folder, Auto Save and its folder, filename pattern, and interface font. Appearance follows the system light/dark setting and accent color.
 
 ## Project layout
 

@@ -12,6 +12,8 @@ final class SnipToolbarModel: ObservableObject {
     @Published var canRedo = false
     /// Whether the annotation controls (tools and style row) are shown; toggled with Space.
     @Published var annotationBarVisible = true
+    /// Whether the style row is shown above the main row (set by the session from the available space).
+    @Published var styleRowAbove = false
 
     var selectTool: (DrawingTool) -> Void = { _ in }
     var undo: () -> Void = {}
@@ -28,7 +30,8 @@ final class SnipToolbarModel: ObservableObject {
 }
 
 /// Floating toolbar shown next to the selection.
-/// Row 1: annotation tools, history, then output actions. Row 2 (while a tool is active): color, width, alpha.
+/// Main row: annotation tools, history, then output actions. Style row (while a tool is active): color, width, alpha,
+/// below or above the main row.
 struct SnipToolbarView: View {
     /// Space reserved around the bar so its shadow is not clipped by the hosting view.
     static let outerPadding: CGFloat = 14
@@ -49,6 +52,9 @@ struct SnipToolbarView: View {
     var body: some View {
         // Rows are right-aligned so the output buttons stay put when the wider style row appears.
         VStack(alignment: .trailing, spacing: 6) {
+            if model.styleRowAbove, showsStyleRow {
+                StyleRow(model: model)
+            }
             FloatingToolbar {
                 if model.annotationBarVisible {
                     ForEach(Self.tools, id: \.tool) { entry in
@@ -68,12 +74,21 @@ struct SnipToolbarView: View {
                 Divider().frame(height: 18)
                 ToolbarButton(symbol: "xmark", label: "Close", action: model.close)
             }
-            if model.annotationBarVisible, model.tool?.usesStrokeStyle == true {
+            if !model.styleRowAbove, showsStyleRow {
                 StyleRow(model: model)
             }
         }
         .padding(Self.outerPadding)
     }
+
+    private var showsStyleRow: Bool { model.annotationBarVisible && model.tool?.usesStrokeStyle == true }
+
+    /// Height of the toolbar with the main row only, including the outer padding.
+    static let mainRowHeight: CGFloat = {
+        let view = NSHostingView(rootView: SnipToolbarView(model: SnipToolbarModel()))
+        view.layoutSubtreeIfNeeded()
+        return view.fittingSize.height
+    }()
 }
 
 private struct StyleRow: View {

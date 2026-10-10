@@ -86,14 +86,14 @@ The system SHALL show a floating toolbar near the selection with Copy, Save, Pin
 - **THEN** a pin window with the image appears at the selection's on-screen position and the session ends
 
 ### Requirement: Auto save
-The system SHALL support Auto Save, which writes every successful snip to the configured Auto Save folder when enabled.
+The system SHALL support Auto Save, which, when enabled, writes each new selection (without annotations) to the configured Auto Save folder as soon as the selection is made. Copy, Save, Pin, moving, and resizing SHALL NOT trigger Auto Save.
 
 #### Scenario: Auto save on
-- **WHEN** Auto Save is enabled and the user copies a snip
-- **THEN** the image is also written to the Auto Save folder
+- **WHEN** Auto Save is enabled and the user finishes dragging a selection or clicks a window
+- **THEN** the selected image is written to the Auto Save folder
 
 #### Scenario: Auto save off
-- **WHEN** Auto Save is disabled and the user copies a snip
+- **WHEN** Auto Save is disabled and the user makes a selection
 - **THEN** no file is written
 
 ### Requirement: Native resolution output

@@ -81,7 +81,8 @@ struct PreferencesView: View {
                     ForEach(ImageFormat.allCases, id: \.self) { Text($0.rawValue.uppercased()).tag($0) }
                 }
                 TextField("Filename pattern", text: $settings.values.filenamePattern)
-                Toggle("Auto Save every snip", isOn: $settings.values.autoSaveEnabled)
+                FolderRow(title: "Save folder", path: $settings.values.saveFolder)
+                Toggle("Auto Save on selection", isOn: $settings.values.autoSaveEnabled)
                 FolderRow(title: "Auto Save folder", path: $settings.values.autoSaveFolder)
             }
             Section("Appearance") {
@@ -129,6 +130,7 @@ private struct FolderRow: View {
                     panel.canChooseDirectories = true
                     panel.canChooseFiles = false
                     panel.canCreateDirectories = true
+                    panel.directoryURL = URL(fileURLWithPath: path)
                     if panel.runModal() == .OK, let url = panel.url { path = url.path }
                 }
             }

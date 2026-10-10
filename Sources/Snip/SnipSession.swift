@@ -24,6 +24,8 @@ final class SnipSessionController {
     private lazy var colorPanelBridge = ColorPanelBridge { [weak self] color in self?.applyCustomColor(color) }
     private enum Gesture { case none, selection, drawing }
     private var gesture = Gesture.none
+    /// Whether the current selection gesture draws a new selection (rather than moving or resizing one).
+    private var isCreatingSelection = false
 
     /// Receives the finished image and its on-screen frame (global top-left points) when the user pins a snip.
     var onPin: ((_ image: CGImage, _ frame: CGRect) -> Void)?
@@ -110,7 +112,13 @@ final class SnipSessionController {
     var onFinish: ((_ selection: CGRect?) -> Void)?
 
     func start() {
-        guard !isActive else { return }
+        guard !isStarting else { return }
+        // A session that is already open is brought back to the front instead of being left behind other windows.
+        if !panels.isEmpty {
+            log.notice("snip session already open; restoring overlay")
+            restoreOverlay()
+            return
+        }
         isStarting = true
         hoverRect = nil
         windows = WindowDetector.snapshot()
@@ -214,6 +222,7 @@ final class SnipSessionController {
         }
         // Keep the hover highlight until a real drag starts, so a plain click does not flash the dim layer.
         gesture = .selection
+        isCreatingSelection = model.hitTest(model.clamp(point)) == .none
         model.mouseDown(at: point)
         redraw()
     }
@@ -259,6 +268,7 @@ final class SnipSessionController {
         } else {
             updateHover(at: point)
         }
+        if isCreatingSelection, let rect = model.rect { autoSaveIfEnabled(rect) }
         redraw()
     }
 
@@ -343,18 +353,21 @@ final class SnipSessionController {
         if let tiff = NSBitmapImageRep(cgImage: image).tiffRepresentation {
             pasteboard.setData(tiff, forType: .tiff)
         }
-        autoSaveIfEnabled(image)
         end(selection: rect)
     }
 
-    /// Asks where to save, using the format from Preferences. Cancelling returns to the overlay.
+    /// Asks where to save, starting in the save folder and using the format from Preferences.
+    /// Cancelling returns to the overlay.
     func save() {
         guard let (image, rect) = renderSelection() else { return }
         let format = settings.values.imageFormat.output
         guard let data = ImageEncoder.encode(image, as: format) else { return }
 
         for panel in panels { panel.orderOut(nil) }
+        let folder = URL(fileURLWithPath: settings.values.saveFolder)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let savePanel = NSSavePanel()
+        savePanel.directoryURL = folder
         savePanel.allowedContentTypes = [format == .png ? .png : .jpeg]
         savePanel.nameFieldStringValue = FilenameFormatter.name(
             pattern: settings.values.filenamePattern, date: Date()
@@ -372,14 +385,12 @@ final class SnipSessionController {
             restoreOverlay()
             return
         }
-        autoSaveIfEnabled(image)
         end(selection: rect)
     }
 
     /// Hands the snip to the pin layer at its on-screen position and ends the session.
     func pin() {
         guard let (image, rect) = renderSelection() else { return }
-        autoSaveIfEnabled(image)
         onPin?(image, rect)
         end(selection: rect)
     }
@@ -393,8 +404,13 @@ final class SnipSessionController {
         keyPanel?.makeFirstResponder(keyPanel?.contentView)
     }
 
-    private func autoSaveIfEnabled(_ image: CGImage) {
+    /// Writes a newly made selection, without annotations, to the Auto Save folder when Auto Save is on.
+    private func autoSaveIfEnabled(_ rect: CGRect) {
         guard settings.values.autoSaveEnabled else { return }
+        guard let image = SnipOutput.render(selection: rect, captures: captures)?.image else {
+            log.error("auto save render failed for selection \(String(describing: rect), privacy: .public)")
+            return
+        }
         let format = settings.values.imageFormat.output
         guard let data = ImageEncoder.encode(image, as: format) else { return }
         let name = FilenameFormatter.name(pattern: settings.values.filenamePattern, date: Date())
@@ -413,21 +429,37 @@ final class SnipSessionController {
 
     var showsToolbar: Bool { model.rect != nil && !isDragging }
 
-    /// Top-left of the toolbar (including its outer padding) in global points: below the selection, right-aligned;
-    /// above it when there is no room below; inside its bottom edge as a last resort.
+    /// Top-left of the toolbar (including its outer padding) in global points. The main row goes below the selection,
+    /// right-aligned; above it when there is no room below; inside its bottom edge as a last resort. The style row, when
+    /// shown, goes on a side of the main row that fits on the display and does not cover the selection, preferring
+    /// below; else on a side that fits. Updates `toolbarModel.styleRowAbove` to match.
     func toolbarOrigin(size: CGSize) -> CGPoint? {
         guard let rect = model.rect else { return nil }
         let pad = SnipToolbarView.outerPadding
         let gap: CGFloat = 6
         let bounds = model.bounds
+        let mainHeight = min(SnipToolbarView.mainRowHeight, size.height)
         var x = rect.maxX - size.width + pad
         x = min(max(x, bounds.minX), bounds.maxX - size.width)
         var y = rect.maxY + gap - pad
-        if y + size.height - pad > bounds.maxY {
-            y = rect.minY - gap - size.height + pad
-            if y + pad < bounds.minY { y = rect.maxY - size.height + pad - gap }
+        if y + mainHeight - pad > bounds.maxY {
+            y = rect.minY - gap - mainHeight + pad
+            if y + pad < bounds.minY { y = rect.maxY - mainHeight + pad - gap }
         }
-        return CGPoint(x: x, y: y)
+        let extra = size.height - mainHeight
+        guard extra > 0 else { return CGPoint(x: x, y: y) }
+
+        let mainRow = CGRect(x: x + pad, y: y + pad, width: size.width - 2 * pad, height: mainHeight - 2 * pad)
+        let display = captures.map(\.frame).first { $0.contains(CGPoint(x: mainRow.midX, y: mainRow.midY)) } ?? bounds
+        let below = CGRect(x: mainRow.minX, y: mainRow.maxY, width: mainRow.width, height: extra)
+        let above = CGRect(x: mainRow.minX, y: mainRow.minY - extra, width: mainRow.width, height: extra)
+        func fits(_ r: CGRect) -> Bool { r.minY >= display.minY && r.maxY <= display.maxY }
+        func clear(_ r: CGRect) -> Bool { !rect.intersects(r) }
+        let styleAbove = if fits(below) && clear(below) { false }
+            else if fits(above) && clear(above) { true }
+            else { !fits(below) }
+        if toolbarModel.styleRowAbove != styleAbove { toolbarModel.styleRowAbove = styleAbove }
+        return CGPoint(x: x, y: styleAbove ? y - extra : y)
     }
 
     private func end(selection: CGRect?) {
@@ -470,6 +502,8 @@ private final class OverlayPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = false
         isReleasedWhenClosed = false
+        // NSPanel hides on app deactivation by default, which would leave an invisible session that blocks new snips.
+        hidesOnDeactivate = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         contentView = OverlayView(capture: capture, controller: controller)
         setFrame(screen.frame, display: false)
